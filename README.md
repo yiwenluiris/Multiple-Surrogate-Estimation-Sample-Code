@@ -1,2 +1,2 @@
 # Multiple Surrogate Estimation Sample Code
- Sample for augmented estimation using multiple surrogates
+This repository serves to present the code for augmented estimation using multiple surrogates
