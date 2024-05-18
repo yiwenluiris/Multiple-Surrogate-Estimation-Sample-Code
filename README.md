@@ -18,3 +18,9 @@ This is the code for our paper "Leveraging Error-Prone Algorithm-Derived Phenoty
 
 **Conclusions:** Our method combines information across multiple surrogates using a statistically efficient seemingly unrelated regression framework. Our method provides a robust alternative to single-surrogate-based bias correction, especially in contexts lacking information on which surrogate is superior.
 
+## Code and sample data
+**Code** Run _multi_surrogate_code.R_ with sample data or generic data in the same format to try the method<br />
+**Sample data** The generated synthetic data _sample_data.csv_ is provided in the repo. 
+
+## Questions?
+Feel free to contact _yiwenlu at sas.upenn.edu_ for any questions regarding this repo. 
