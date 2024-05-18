@@ -1,5 +1,6 @@
 library(matlib)
 library(MASS)
+library(tidyverse)
 
 expit <- function(x){ exp(x)/(1+exp(x)) }
 logit <- function(x){ log(p/(1-p))}
@@ -7,19 +8,60 @@ logit <- function(x){ log(p/(1-p))}
 ####################################################################################
 ############################# Proposed method ######################################
 ####################################################################################
-# n: total size of data set
-# m: size of valiadation set
-# x: Covatiates (characteristics of patients)
-# val_x, val_s, val_y: validation part of covariates, surrogates, and gold outcome
-# beta_hat: estimation using val_y and val_x
-# gamma_hat: estimation using val_s and val_x
-# gamma_bar: estimation using s and x
+# y: True phenotypes (with NA)
+# !!!!!! other than validation set, the value of y should be "NA" !!!!!!!!!!!!!!!!
+
+# s: Multiple algorithm-generated phenotypes (surrogates)
+
+# x: Covariates (characteristics of patients)
+# !!!!!! categorical predictors have to be transferred into dummy variables !!!!!!
 ####################################################################################
 
-augmented_est <- function(n, m, x, val_x, val_s, val_y, beta_hat, gamma_hat, gamma_bar){
-  rho <- m/n #validation set ratio
-  nr <- dim(x)[2]
+augmented_est <- function(y, s, x){
   
+  id <- which(y != 'NA')
+  x <- cbind(1, x)
+  
+  val_x = x[id,]          # validation set of x
+  val_y = y[id]           # validation set of y
+  val_s = s[id,]           # validation set of s
+  
+  nr <- dim(x)[2] #Number of variables
+  n <- dim(x)[1] #Total sample size
+  m <- length(val_y) #number of validated individuals
+  rho <- m/n #Validation set ratio
+  
+  
+  # glm for validation set only with true disease
+  glm1 <- glm(val_y~val_x[,-1], family="binomial")
+  beta_hat <- glm1$coefficients
+  
+  var_beta_hat <- summary(glm1)$coefficients[,2]**2
+  
+  gamma_hat<-vector()
+  var_gamma_hat<-vector()
+  gamma_bar<-vector()
+  var_gamma_bar<-vector()
+  
+  
+  for (ind_s in 1: ncol(s)){
+    #glm for validation set validation set only with surrogate
+    glm2 <- glm(val_s[,ind_s]~val_x[,-1],family="binomial")
+    gamma_hat_temp <- glm2$coefficients
+    var_gamma_hat_temp <- summary(glm2)$coefficients[,2]**2
+    gamma_hat = rbind(gamma_hat, gamma_hat_temp)
+    var_gamma_hat = rbind(var_gamma_hat, var_gamma_hat_temp)
+    
+    #glm for all surrogate
+    glm3 <- glm(s[,ind_s]~x[,-1],family="binomial")
+    gamma_bar_temp <- glm3$coefficients
+    var_gamma_bar_temp <- summary(glm3)$coefficients[,2]**2
+    gamma_bar = rbind(gamma_bar, gamma_bar_temp)
+    var_gamma_bar = rbind(var_gamma_bar, var_gamma_bar_temp)
+  }
+  
+  ####################################################
+  # to get the augmented estimator 
   Z1 <- beta_hat %*% t(x)
   Z2 <- gamma_hat %*% t(x)
   Z3 <- gamma_bar %*% t(x)
@@ -28,8 +70,7 @@ augmented_est <- function(n, m, x, val_x, val_s, val_y, beta_hat, gamma_hat, gam
   val_Z2 <- Z2[,id]
   val_Z3 <- Z3[,id]
   
-  # information matrix
-  info_matrix1 <- matrix(0 , nrow = nr, ncol = nr)     
+  info_matrix1 <- matrix(0 , nrow = nr, ncol = nr)     # information matrix
   for (i in 1:nr){
     for (j in 1:nr){
       if (i == j){
@@ -40,7 +81,9 @@ augmented_est <- function(n, m, x, val_x, val_s, val_y, beta_hat, gamma_hat, gam
     }
   }
   
-  info_matrix2 <- matrix(0 , nrow = nr*ncol(s), ncol = nr*ncol(s))
+  #dim of info_matrix1: nr nr
+  
+  info_matrix2 <- matrix(0 , nrow = nr*ncol(s), ncol = nr*ncol(s))     # information matrix
   
   for(k in 1:ncol(s)){
     for (i in 1:nr){
@@ -56,10 +99,11 @@ augmented_est <- function(n, m, x, val_x, val_s, val_y, beta_hat, gamma_hat, gam
   }
   
   p1 <- matrix(0, nrow = nr, ncol =nr)
-  p2 <- matrix(0, nrow = nr*ncol(s), ncol =nr*ncol(s)) 
-  p3 <- matrix(0, nrow = nr*ncol(s), ncol =nr) 
+  p2 <- matrix(0, nrow = nr*ncol(s), ncol =nr*ncol(s))
+  p3 <- matrix(0, nrow = nr*ncol(s), ncol =nr)
   
   for (i in 1:m){
+    
     phi1 <- (val_y[i] - (exp(val_Z1[i])/(1+exp(val_Z1[i])))) %*% as.numeric(val_x[i,])
     phi1 <- inv(info_matrix1) %*% as.vector(phi1)
     p1 <- p1 + phi1 %*% t(phi1)
@@ -83,3 +127,15 @@ augmented_est <- function(n, m, x, val_x, val_s, val_y, beta_hat, gamma_hat, gam
   
   return(list(beta_aug_mul, var_aug_mul, ci_aug_mul))
 }
+
+
+## ===================================================================================== ##
+## ===================================== Example ======================================= ##
+## ===================================================================================== ##
+
+sample_data <- read.csv("sample_data.csv")
+y <- as.matrix(sample_data[,1])
+s <- as.matrix(sample_data[,c(2:4)])
+x <- as.matrix(sample_data[,c(5:6)])
+  
+augmented_result <- augmented_est(y, s, x)
